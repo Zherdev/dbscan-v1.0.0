@@ -1,5 +1,9 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-/*   Description: Implementation of scalable parallel DBSCAN algorithm       */
+/*   Files: mpi_main.cpp clusters.cpp  clusters.h utils.h utils.cpp          */
+/*   			dbscan.cpp dbscan.h kdtree2.cpp kdtree2.hpp          */
+/*			geometric_partitioning.h geometric_partitioning.cpp  */
+/*		    						             */
+/*   Description: an mpi implementation of dbscan clustering algorithm       */
 /*				using the disjoint set data structure        */
 /*                                                                           */
 /*   Author:  Md. Mostofa Ali Patwary                                        */
@@ -18,13 +22,35 @@
 /*   Storage and Analysis (Supercomputing, SC'12), pp.62:1-62:11, 2012.	     */
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-Two versions of source code:
+#include "utils.h"
 
-1. parallel_multicore (for shared memory computers): 
-An OpenMP implementation of DBSCAN clustering algorithm using the disjoint set data structure.
+// Find Kth element without recusion
+float findKMedian(vector<float>& A,int K)
+{
+	int l,m;
+	l=0;
+	m=A.size()-1;
+	while (l<m)
+	{
+		float x=A[K];
+		int i=l;
+		int j=m;
+		do {
+			while (A[i]<x) i++;
+			while (x<A[j]) j--;
+			if (i<=j)
+			{
+				swap(A[i], A[j]);
+				i++;
+				j--;
+			}
+		} while (i<=j);
 
-2. parallel_mpi (for distributed memory computers):
-An MPI implementation DBSCAN clustering algorithm using the disjoint set data structure.
+		if (j<K) l=i;
+		if (K<i) m=j;
+	}
 
-More details on how to use the code are available in the corresponding folder.
+	return A[K];
+}
+
 

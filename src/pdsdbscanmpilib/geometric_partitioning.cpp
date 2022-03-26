@@ -22,26 +22,27 @@
 /*   Storage and Analysis (Supercomputing, SC'12), pp.62:1-62:11, 2012.	     */
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#include <mpi.h>
 #include "geometric_partitioning.h"
 //#include <boost/foreach.hpp>
 
 namespace NWUClustering
 {
-	void get_extra_points(ClusteringAlgo& dbs)
+	void get_extra_points(MPI_Comm mpi_comm, ClusteringAlgo& dbs)
 	{
 		#ifdef _DEBUG_GP
-		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Barrier(mpi_comm);
 		double end, start = MPI_Wtime();
 		#endif
 
 		int k, rank, nproc, i, j;
-        	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        	MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+        	MPI_Comm_rank(mpi_comm, &rank);
+        	MPI_Comm_size(mpi_comm, &nproc);
 
         	#ifdef _DEBUG
         	if(rank == proc_of_interest) cout << "extra point time part 0 strating " << endl;
         	#endif
-		
+
 		interval* local_box = new interval[dbs.m_pts->m_i_dims];
 		compute_local_bounding_box(dbs, local_box);
 
@@ -52,17 +53,17 @@ namespace NWUClustering
 		for(i = 0; i < dbs.m_pts->m_i_dims; i++)
 		{
 			local_box[i].upper += eps;
-			local_box[i].lower -= eps; 
+			local_box[i].lower -= eps;
 		}
 
-		//cout << "proc " << rank << " ext: upper "<< local_box[0].upper << " lower " << local_box[0].lower << endl;	
-	
+		//cout << "proc " << rank << " ext: upper "<< local_box[0].upper << " lower " << local_box[0].lower << endl;
+
 		// all together all the extending bounding box
 		interval* gather_local_box = new interval[dbs.m_pts->m_i_dims * nproc];
 
         	// gather the local bounding box first
         	MPI_Allgather(local_box, sizeof(interval) * dbs.m_pts->m_i_dims, MPI_BYTE, gather_local_box,
-        						sizeof(interval) * dbs.m_pts->m_i_dims, MPI_BYTE, MPI_COMM_WORLD);
+        						sizeof(interval) * dbs.m_pts->m_i_dims, MPI_BYTE, mpi_comm);
 
 		/*#ifdef _DEBUG_GP
 		if(rank == proc_of_interest)
@@ -71,11 +72,11 @@ namespace NWUClustering
 			{
 					if(i % dbs.m_pts->m_i_dims == 0)
 						cout << "\nproc " << i / dbs.m_pts->m_i_dims << " bbox: ";
-					
+
 					if(i % dbs.m_pts->m_i_dims == dbs.m_pts->m_i_dims - 1)
                 		cout << "(" << gather_local_box[i].upper << ", " << gather_local_box[i].lower << ")";
             		else
-                		cout << "(" << gather_local_box[i].upper << ", " << gather_local_box[i].lower << "), ";				
+                		cout << "(" << gather_local_box[i].upper << ", " << gather_local_box[i].lower << "), ";
 			}
 			cout << endl;
 		}
@@ -98,10 +99,10 @@ namespace NWUClustering
         	recv_buf_ind.resize(nproc, empty_i);
 
 		#ifdef _DEBUG_GP
-		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Barrier(mpi_comm);
 		end = MPI_Wtime();
 		#ifdef _DEBUG
-		if(rank == proc_of_interest) cout << "extra point time part 1: " << end - start << endl;	
+		if(rank == proc_of_interest) cout << "extra point time part 1: " << end - start << endl;
 		#endif
 		start = end;
 		#endif
@@ -111,8 +112,8 @@ namespace NWUClustering
 			if(k == rank) // self
 				continue;
 
-			// check the two extended bounding box of proc rank and k. If they don't overlap, there must be no points 
-			// SHOULD SUBTRACT EPS			
+			// check the two extended bounding box of proc rank and k. If they don't overlap, there must be no points
+			// SHOULD SUBTRACT EPS
 
 			overlap = true;
 			for(j = 0; j < dbs.m_pts->m_i_dims; j++)
@@ -120,7 +121,7 @@ namespace NWUClustering
 				if(gather_local_box[rank * dbs.m_pts->m_i_dims + j].lower < gather_local_box[k * dbs.m_pts->m_i_dims +j].lower)
 				{
 					//if(gather_local_box[rank * dbs.m_pts->m_i_dims + j].upper < gather_local_box[k * dbs.m_pts->m_i_dims + j].lower)
-					if(gather_local_box[rank * dbs.m_pts->m_i_dims + j].upper - gather_local_box[k * dbs.m_pts->m_i_dims + j].lower < eps)	
+					if(gather_local_box[rank * dbs.m_pts->m_i_dims + j].upper - gather_local_box[k * dbs.m_pts->m_i_dims + j].lower < eps)
 					{
 						overlap = false;
 	                    			break;
@@ -147,19 +148,19 @@ namespace NWUClustering
 				if_inside = true;
 				for(j = 0; j < dbs.m_pts->m_i_dims; j++)
 				{
-					if(dbs.m_pts->m_points[i][j] < gather_local_box[k * dbs.m_pts->m_i_dims + j].lower || 
+					if(dbs.m_pts->m_points[i][j] < gather_local_box[k * dbs.m_pts->m_i_dims + j].lower ||
 						dbs.m_pts->m_points[i][j] > gather_local_box[k * dbs.m_pts->m_i_dims + j].upper)
 					{
 						if_inside = false;
 						break;
 					}
 				}
-				
+
 				if(if_inside == true)
 				{
 					for(j = 0; j < dbs.m_pts->m_i_dims; j++)
 						send_buf[k].push_back(dbs.m_pts->m_points[i][j]);
-					
+
 					send_buf_ind[k].push_back(i);
 					count++;
 				}
@@ -167,10 +168,10 @@ namespace NWUClustering
 		}
 
         	#ifdef _DEBUG_GP
-		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Barrier(mpi_comm);
         	end = MPI_Wtime();
         	#ifdef _DEBUG
-        	if(rank == proc_of_interest) cout << "extra point time part 2: " << end - start << endl;        
+        	if(rank == proc_of_interest) cout << "extra point time part 2: " << end - start << endl;
         	#endif
         	start = end;
         	#endif
@@ -180,48 +181,48 @@ namespace NWUClustering
 		send_buf_size.resize(nproc, 0);
 		recv_buf_size.resize(nproc, 0);
 
-		
+
 		/*int tid, irecv[nproc], isend[nproc];
 		MPI_Request s_req_recv[nproc], s_req_send[nproc], d_req_send[nproc], d_req_recv[nproc]; // better to malloc the memory
         MPI_Status  s_stat, d_stat_send[nproc], d_stat;
 
 		double start, stop;
-	    MPI_Barrier(MPI_COMM_WORLD);
+	    MPI_Barrier(mpi_comm);
         start = MPI_Wtime();
 
         for(tid = 0; tid < nproc; tid++)
-        	MPI_Irecv(&irecv[tid], 1, MPI_INT, tid, 1000, MPI_COMM_WORLD, &s_req_recv[tid]);
+        	MPI_Irecv(&irecv[tid], 1, MPI_INT, tid, 1000, mpi_comm, &s_req_recv[tid]);
 
         //int scount = 0, pos;
         int pos;
         for(tid = 0; tid < nproc; tid++)
-        {	
+        {
 			isend[tid] = send_buf[tid].size();
-            MPI_Isend(&isend[tid], 1, MPI_INT, tid, 1000, MPI_COMM_WORLD, &s_req_send[tid]);
-       	} 
+            MPI_Isend(&isend[tid], 1, MPI_INT, tid, 1000, mpi_comm, &s_req_send[tid]);
+       	}
 
         for(tid = 0; tid < nproc; tid++)
         {
                 MPI_Waitany(nproc, &s_req_recv[0], &pos, &s_stat);
 		}
 
-		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Barrier(mpi_comm);
 
-		if(rank == proc_of_interest) 
+		if(rank == proc_of_interest)
 		{
 		    stop = MPI_Wtime();
 			cout << "Size sending time ISIR " << stop - start << endl;
 		}
 
-		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Barrier(mpi_comm);
 		start = MPI_Wtime();
 		*/
 
 		for(i = 0; i < nproc; i++)
 			send_buf_size[i] = send_buf[i].size();
-	
-		MPI_Alltoall(&send_buf_size[0], 1, MPI_INT, &recv_buf_size[0], 1, MPI_INT, MPI_COMM_WORLD);
-		/*MPI_Barrier(MPI_COMM_WORLD);
+
+		MPI_Alltoall(&send_buf_size[0], 1, MPI_INT, &recv_buf_size[0], 1, MPI_INT, mpi_comm);
+		/*MPI_Barrier(mpi_comm);
 
 		#ifdef _DEBUG
 		if(rank == proc_of_interest) cout << "Size sending time AtA " << MPI_Wtime() - start << endl;
@@ -241,8 +242,8 @@ namespace NWUClustering
 				recv_buf[i].resize(recv_buf_size[i], 0);
 				recv_buf_ind[i].resize(recv_buf_size[i] / dbs.m_pts->m_i_dims, -1);
 
-				MPI_Irecv(&recv_buf[i][0], recv_buf_size[i], MPI_FLOAT, i, tag, MPI_COMM_WORLD, &req_recv[recv_count++]);
-				MPI_Irecv(&recv_buf_ind[i][0], recv_buf_size[i] / dbs.m_pts->m_i_dims, MPI_INT, i, tag + 1, MPI_COMM_WORLD, &req_recv[recv_count++]);
+				MPI_Irecv(&recv_buf[i][0], recv_buf_size[i], MPI_FLOAT, i, tag, mpi_comm, &req_recv[recv_count++]);
+				MPI_Irecv(&recv_buf_ind[i][0], recv_buf_size[i] / dbs.m_pts->m_i_dims, MPI_INT, i, tag + 1, mpi_comm, &req_recv[recv_count++]);
 			}
 		}
 
@@ -251,8 +252,8 @@ namespace NWUClustering
         	{
             		if(send_buf_size[i] > 0)
             		{
-                		MPI_Isend(&send_buf[i][0], send_buf_size[i], MPI_FLOAT, i, tag, MPI_COMM_WORLD, &req_send[send_count++]);
-				MPI_Isend(&send_buf_ind[i][0], send_buf_size[i] / dbs.m_pts->m_i_dims, MPI_INT, i, tag + 1, MPI_COMM_WORLD, &req_send[send_count++]);
+                		MPI_Isend(&send_buf[i][0], send_buf_size[i], MPI_FLOAT, i, tag, mpi_comm, &req_send[send_count++]);
+				MPI_Isend(&send_buf_ind[i][0], send_buf_size[i] / dbs.m_pts->m_i_dims, MPI_INT, i, tag + 1, mpi_comm, &req_send[send_count++]);
 			}
         	}
 
@@ -267,10 +268,10 @@ namespace NWUClustering
 		for(i = 0; i < recv_count; i++)
 		{
 			MPI_Waitany(recv_count, &req_recv[0], &rpos, &stat_recv);
-		
+
 			rtag = stat_recv.MPI_TAG;
 			rsource = stat_recv.MPI_SOURCE;
-		
+
 			if(rtag == tag)
 			{
 				// process the request
@@ -285,19 +286,19 @@ namespace NWUClustering
 				// postpond this computation and call update points later
 				// processing immediately might lead to invalid computation
 			}
-		}	
+		}
 
 		//cout << "proc " << rank << " send_count " << send_count << endl;
-		
+
 		// MAY NOT NEED THIS
 		if(send_count > 0)
 			MPI_Waitall(send_count, &req_send[0], &stat_send[0]);
 
         	#ifdef _DEBUG_GP
-		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Barrier(mpi_comm);
         	end = MPI_Wtime();
 	        #ifdef _DEBUG
-        	if(rank == proc_of_interest) cout << "extra point time part 3: " << end - start << endl;        
+        	if(rank == proc_of_interest) cout << "extra point time part 3: " << end - start << endl;
         	#endif
         	start = end;
         	#endif
@@ -316,14 +317,14 @@ namespace NWUClustering
 			{
 				cout << recv_buf_size[i] << " ";
 			}
-			
+
 			cout << endl;
 		}
 		*/
 
 		//#ifdef _DEBUG
-		MPI_Reduce(&count, &gcount, 1, MPI_INT, MPI_SUM, proc_of_interest, MPI_COMM_WORLD);
-		
+		MPI_Reduce(&count, &gcount, 1, MPI_INT, MPI_SUM, proc_of_interest, mpi_comm);
+
 		//dbs.m_extra_point_per_processor = gcount/nproc; // save extra point per processor for future use if needed
 		#ifdef _DEBUG
 		if(rank == proc_of_interest)
@@ -334,10 +335,10 @@ namespace NWUClustering
 		#endif
 
         	#ifdef _DEBUG_GP
-		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Barrier(mpi_comm);
         	end = MPI_Wtime();
 	        #ifdef _DEBUG
-		if(rank == proc_of_interest) cout << "extra point time part 4: " << end - start << endl;        
+		if(rank == proc_of_interest) cout << "extra point time part 4: " << end - start << endl;
         	#endif
         	start = end;
         	#endif
@@ -354,26 +355,26 @@ namespace NWUClustering
 		delete [] local_box;
 	}
 
-	void start_partitioning(ClusteringAlgo& dbs)
+	void start_partitioning(MPI_Comm mpi_comm, ClusteringAlgo& dbs)
 	{
-		int r_count, s_count, rank, nproc, i, j, k;
-		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-		MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+		int r_count, s_count, rank, nproc, i, j;
+		MPI_Comm_rank(mpi_comm, &rank);
+		MPI_Comm_size(mpi_comm, &nproc);
 
 		// compute the local bouding box for each dimention
 		interval* box = new interval[dbs.m_pts->m_i_dims];
 		//compute_local_bounding_box(dbs, box);
 		// we don't need to compute as we have stored this while reading
-		
+
 		for(i = 0; i < dbs.m_pts->m_i_dims; i++)
-		{	
+		{
 			box[i].upper = dbs.m_pts->m_box[i].upper;
 			box[i].lower = dbs.m_pts->m_box[i].lower;
 		}
 
 		// compute the global bouding box for each dimention
 		interval* gbox = new interval[dbs.m_pts->m_i_dims];
-		compute_global_bounding_box(dbs, box, gbox, nproc);
+		compute_global_bounding_box(mpi_comm, dbs, box, gbox, nproc);
 
 		//delete [] box;
 		//delete [] gbox;
@@ -384,7 +385,7 @@ namespace NWUClustering
         	#endif
 
 		// find the loop count for nproc processors
-		int internal_nodes, partner_rank, loops, b, color, sub_rank, d, max, sub_nprocs;
+		int internal_nodes, partner_rank, loops, b, color, sub_rank, d;
 		//MPI_Comm new_comm;
 		MPI_Status status;
 
@@ -396,21 +397,21 @@ namespace NWUClustering
 			loops++;
 			internal_nodes = internal_nodes << 1;
 		}
-		
+
 		internal_nodes = internal_nodes << 1;
-		
+
 		//gbox for each node in the tree [ONLY upto to reaching each processor]
 		interval** nodes_gbox = new interval*[internal_nodes];
 		for(i = 0; i < internal_nodes; i++)
 			nodes_gbox[i] = new interval[dbs.m_pts->m_i_dims];
-		
+
 		copy_global_box_to_each_node(dbs, nodes_gbox, gbox, internal_nodes);
 		// now each node in the tree has gbox
 
 		/*
  		#ifdef _DEBUG
 		if(rank == proc_of_interest)
-		{	cout << "proc " << rank << " nodes " << internal_nodes << " loops "<< loops << endl;		
+		{	cout << "proc " << rank << " nodes " << internal_nodes << " loops "<< loops << endl;
 			print_points(dbs, rank);
 		}
 		#endif
@@ -419,13 +420,12 @@ namespace NWUClustering
 	       	#ifdef _DEBUG
         	if(rank == proc_of_interest) cout << "Partitioning: Pos 2" << endl;
         	#endif
-	
+
 		vector <float> send_buf;
 		vector <int>   invalid_pos_as;
 		vector <float> recv_buf;
-				
+
 		int pow2_i;
-		float median;
 
 		for(i = 0; i < loops; i++)
 		{
@@ -435,111 +435,111 @@ namespace NWUClustering
 			partner_rank = rank ^ (int)(nproc/POW2(i + 1));
 
 			MPI_Comm new_comm;
-            		MPI_Comm_split(MPI_COMM_WORLD, color, rank, &new_comm);
+            		MPI_Comm_split(mpi_comm, color, rank, &new_comm);
            		MPI_Comm_rank(new_comm, &sub_rank);
-	
+
 			//	cout << "i " << i << " proc " << rank << " b " << b << " color " << color << " partner_rank " << partner_rank << " sub_rank " << sub_rank << " pow_2i " << pow2_i << endl;
-			
+
 			if(sub_rank == 0)
 			{
 				d = 0;
 				for(j = 1; j < dbs.m_pts->m_i_dims; j++)
 				{
-					
-					if(nodes_gbox[pow2_i + color][j].upper - nodes_gbox[pow2_i + color][j].lower > 
+
+					if(nodes_gbox[pow2_i + color][j].upper - nodes_gbox[pow2_i + color][j].lower >
 							nodes_gbox[pow2_i + color][d].upper - nodes_gbox[pow2_i + color][d].lower)
 						d = j;
 				}
-			}	
-	
+			}
+
 			MPI_Bcast(&d, 1, MPI_INT, 0, new_comm);
 
             		//#ifdef _DEBUG
-			//MPI_Barrier(MPI_COMM_WORLD);
+			//MPI_Barrier(mpi_comm);
             		//if(rank == proc_of_interest) cout << "At before starting median - round " << i << endl;
             		//#endif
 
 			// compute the median in this dimension
-			float median  = get_median(dbs, d, new_comm);		
+			float median  = get_median(mpi_comm, dbs, d, new_comm);
 
 	        	//#ifdef _DEBUG
-    	    		//if(rank == proc_of_interest) cout << "median " << median << " round " << i << endl;	
+    	    		//if(rank == proc_of_interest) cout << "median " << median << " round " << i << endl;
 			//#endif
 
 			s_count = get_points_to_send(dbs, send_buf, invalid_pos_as, median, d, rank, partner_rank);
 
 			if (rank < partner_rank)
 			{
-				MPI_Sendrecv(&s_count, 1, MPI_INT, partner_rank, 4, &r_count, 1, MPI_INT, partner_rank, 5, MPI_COMM_WORLD, &status);
+				MPI_Sendrecv(&s_count, 1, MPI_INT, partner_rank, 4, &r_count, 1, MPI_INT, partner_rank, 5, mpi_comm, &status);
 				recv_buf.resize(r_count * dbs.m_pts->m_i_dims, 0.0);
 			    	MPI_Sendrecv(&send_buf[0], s_count * dbs.m_pts->m_i_dims, MPI_FLOAT, partner_rank, 2,
-							&recv_buf[0], r_count * dbs.m_pts->m_i_dims, MPI_FLOAT, partner_rank, 3, MPI_COMM_WORLD, &status);
+							&recv_buf[0], r_count * dbs.m_pts->m_i_dims, MPI_FLOAT, partner_rank, 3, mpi_comm, &status);
 				send_buf.clear();
 			}
 			else
 			{
-				MPI_Sendrecv(&s_count, 1, MPI_INT, partner_rank, 5, &r_count, 1, MPI_INT, partner_rank, 4, MPI_COMM_WORLD, &status);
+				MPI_Sendrecv(&s_count, 1, MPI_INT, partner_rank, 5, &r_count, 1, MPI_INT, partner_rank, 4, mpi_comm, &status);
 				recv_buf.resize(r_count * dbs.m_pts->m_i_dims, 0.0);
-				MPI_Sendrecv(&send_buf[0], s_count * dbs.m_pts->m_i_dims, MPI_FLOAT, partner_rank, 3, 
-							&recv_buf[0], r_count * dbs.m_pts->m_i_dims, MPI_FLOAT, partner_rank, 2, MPI_COMM_WORLD, &status);
+				MPI_Sendrecv(&send_buf[0], s_count * dbs.m_pts->m_i_dims, MPI_FLOAT, partner_rank, 3,
+							&recv_buf[0], r_count * dbs.m_pts->m_i_dims, MPI_FLOAT, partner_rank, 2, mpi_comm, &status);
 				send_buf.clear();
 			}
-	
+
 			//#ifdef _DEBUG
-			//MPI_Barrier(MPI_COMM_WORLD);
-    	    		//if(rank == proc_of_interest) cout << "AT before update points - round " << i << endl;	
+			//MPI_Barrier(mpi_comm);
+    	    		//if(rank == proc_of_interest) cout << "AT before update points - round " << i << endl;
 			//#endif
-		
+
 			update_points(dbs, s_count, invalid_pos_as, recv_buf);
 			recv_buf.clear();
-						
+
 			//#ifdef _DEBUG
-			//MPI_Barrier(MPI_COMM_WORLD);
-    	    		//if(rank == proc_of_interest) cout << "AT after update points - round " << i << endl;	
+			//MPI_Barrier(mpi_comm);
+    	    		//if(rank == proc_of_interest) cout << "AT after update points - round " << i << endl;
 			//#endif
-	
+
 			/*
 			#ifdef _DEBUG
 			if(rank == proc_of_interest)
 			{
-				cout << "proc " << rank << " sub proc " << sub_rank << " median " << median << " of dimension " << d << " points to recv " << r_count << " points to send " << s_count << " partner " << partner_rank << endl;			
-				
+				cout << "proc " << rank << " sub proc " << sub_rank << " median " << median << " of dimension " << d << " points to recv " << r_count << " points to send " << s_count << " partner " << partner_rank << endl;
+
 				print_points(dbs, rank);
 			}
 			#endif
 
 			#ifdef _DEBUG
-			cout << "proc " << rank << " round " << i << " points " << dbs.m_pts->m_i_num_points << endl; 
+			cout << "proc " << rank << " round " << i << " points " << dbs.m_pts->m_i_num_points << endl;
 			#endif
 			*/
-			
+
 			//#ifdef _DEBUG
-			//MPI_Barrier(MPI_COMM_WORLD);
-    	    		//if(rank == proc_of_interest) cout << "AT before copying box - round " << i << endl;	
+			//MPI_Barrier(mpi_comm);
+    	    		//if(rank == proc_of_interest) cout << "AT before copying box - round " << i << endl;
 			//#endif
-	
+
 			copy_box(dbs, nodes_gbox[LOWER(pow2_i+color)], nodes_gbox[pow2_i+color]);
 			nodes_gbox[LOWER(pow2_i+color)][d].upper =  median;
 			copy_box(dbs, nodes_gbox[UPPER(pow2_i+color)], nodes_gbox[pow2_i+color]);
-			nodes_gbox[UPPER(pow2_i+color)][d].lower =  median;	
+			nodes_gbox[UPPER(pow2_i+color)][d].lower =  median;
 
             		/*
   			#ifdef _DEBUG
-			MPI_Barrier(MPI_COMM_WORLD);
-            		if(rank == proc_of_interest) cout << "AT after copying box - round " << i << " rank " << rank << endl;  
+			MPI_Barrier(mpi_comm);
+            		if(rank == proc_of_interest) cout << "AT after copying box - round " << i << " rank " << rank << endl;
             		#endif
 
-			#ifdef _DEBUG 
+			#ifdef _DEBUG
 			cout << "proc " << rank << " round " << i << " points " << dbs.m_pts->m_i_num_points << endl;
 			#endif
 			*/
 			MPI_Comm_free(&new_comm);
 		}
-        
+
 		#ifdef _DEBUG
         	if(rank == proc_of_interest) cout << "Partitioning: Pos 3" << endl;
         	#endif
-	
+
 		/*#ifdef _DEBUG
        		cout << "proc " << rank << " points " << dbs.m_pts->m_i_num_points << endl;
         	#endif
@@ -572,7 +572,7 @@ namespace NWUClustering
 		int i, j, k, l, r_count = recv_buf.size() / dbs.m_pts->m_i_dims;
 
 		//cout << "r_count " << r_count << " s_count " << s_count << endl;
-	
+
 		if(r_count >= s_count)
 		{
 			//invalid_pos_as.reserve(dbs.m_pts->m_i_num_points + r_count - s_count);
@@ -580,29 +580,29 @@ namespace NWUClustering
 
 			//dbs.m_pts->m_points.reserve(dbs.m_pts->m_i_num_points + r_count - s_count);
 			//dbs.m_pts->m_points.resize(extents[dbs.m_pts->m_i_num_points + r_count - s_count][dbs.m_pts->m_i_dims]);
-			
+
 			//allocate memory for the points
                 	dbs.m_pts->m_points.resize(dbs.m_pts->m_i_num_points + r_count - s_count);
                 	for(int ll = 0; ll < dbs.m_pts->m_i_num_points + r_count - s_count; ll++)
                 		dbs.m_pts->m_points[ll].resize(dbs.m_pts->m_i_dims);
 
-	
+
 			j = 0;
-			for(i = 0; i < invalid_pos_as.size(); i++)
+			for(i = 0; (size_t)i < invalid_pos_as.size(); i++)
 			{
 				if(invalid_pos_as[i] == 1)
 				{
 					for(k = 0; k < dbs.m_pts->m_i_dims; k++)
 						dbs.m_pts->m_points[i][k] = recv_buf[j++];
 				}
-			}			
+			}
 
 			dbs.m_pts->m_i_num_points = dbs.m_pts->m_i_num_points + r_count - s_count;
 		}
 		else
 		{
 			j = 0;
-			i = 0;	
+			i = 0;
 			if(recv_buf.size() > 0)
 			{
 				for(i = 0; i < dbs.m_pts->m_i_num_points; i++)
@@ -611,8 +611,8 @@ namespace NWUClustering
 					{
 						for(k = 0; k < dbs.m_pts->m_i_dims; k++)
 							dbs.m_pts->m_points[i][k] = recv_buf[j++];
-					
-						if(j == recv_buf.size())
+
+						if((size_t)j == recv_buf.size())
 						{
 							i++;
 							break;
@@ -620,9 +620,9 @@ namespace NWUClustering
 					}
 				}
 			}
-			
+
 			l = dbs.m_pts->m_i_num_points;
-			for( ; i < invalid_pos_as.size(); i++)
+			for( ; (size_t)i < invalid_pos_as.size(); i++)
 			{
 				if(invalid_pos_as[i] == 1)
 				{
@@ -633,7 +633,7 @@ namespace NWUClustering
 							break;
 					}
 
-					if(invalid_pos_as[l] == 0)	
+					if(invalid_pos_as[l] == 0)
 						for(k = 0; k < dbs.m_pts->m_i_dims; k++)
 							dbs.m_pts->m_points[i][k] = dbs.m_pts->m_points[l][k];
 				}
@@ -647,7 +647,7 @@ namespace NWUClustering
                 		dbs.m_pts->m_points[ll].resize(dbs.m_pts->m_i_dims);
 
 			dbs.m_pts->m_i_num_points = dbs.m_pts->m_i_num_points + r_count - s_count;
-		}		
+		}
 	}
 
 	int get_points_to_send(ClusteringAlgo& dbs, vector <float>& send_buf, vector <int>& invalid_pos_as, float median, int d, int rank, int partner_rank)
@@ -682,10 +682,10 @@ namespace NWUClustering
 		}
 
 		return count;
-	}	
+	}
 
-	float get_median(ClusteringAlgo& dbs, int d, MPI_Comm& new_comm)
-	{	
+	float get_median(MPI_Comm mpi_comm, ClusteringAlgo& dbs, int d, MPI_Comm& new_comm)
+	{
 		/*
 		double sum, g_sum;
 		//float sum, g_sum;
@@ -693,7 +693,7 @@ namespace NWUClustering
 		sum = 0.0;
 		g_sum = 0.0;
 
-    	for (int k = 0; k < dbs.m_pts->m_i_num_points; k++) 
+    	for (int k = 0; k < dbs.m_pts->m_i_num_points; k++)
       		sum += dbs.m_pts->m_points[k][d];
 
 		//MPI_Allreduce(&sum, &g_sum, 1, MPI_FLOAT, MPI_SUM, new_comm);
@@ -710,7 +710,7 @@ namespace NWUClustering
 
 		// ADDITIONAL CODE
 		float median;
-		
+
 		vector <float> data;
 		data.reserve(dbs.m_pts->m_i_num_points);
 		data.resize(dbs.m_pts->m_i_num_points, 0);
@@ -722,29 +722,29 @@ namespace NWUClustering
 		/*
        	#ifdef _DEBUG
 		int rank;
-		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+		MPI_Comm_rank(mpi_comm, &rank);
         //MPI_Barrier(new_comm);
-        MPI_Barrier(MPI_COMM_WORLD);
-       	//if(rank == proc_of_interest) 
+        MPI_Barrier(mpi_comm);
+       	//if(rank == proc_of_interest)
        	cout << "AT median Pos 0 - rank " << rank << " data size " << data.size() << endl;
         #endif
 		*/
-	
+
 		median = findKMedian(data, data.size()/2);
 		data.clear();
-		
+
 		#ifdef _DEBUG
 		int rank;
-		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+		MPI_Comm_rank(mpi_comm, &rank);
 		if(rank == proc_of_interest) cout << "Median VALUE " << median << endl;
 		#endif
-	
+
        	/*#ifdef _DEBUG
 		//int rank;
-		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+		MPI_Comm_rank(mpi_comm, &rank);
         //MPI_Barrier(new_comm);
-        MPI_Barrier(MPI_COMM_WORLD);
-       	//if(rank == proc_of_interest) 
+        MPI_Barrier(mpi_comm);
+       	//if(rank == proc_of_interest)
 		cout << "AT median Pos 1 - rank " << rank << " data size " << data.size() << endl;
         #endif
 		*/
@@ -756,7 +756,7 @@ namespace NWUClustering
 	    //#ifdef _DEBUG
 		//int rank;
 		//MPI_Comm_rank(new_comm, &rank);
-    	//if(rank == proc_of_interest) cout << "proc_count " << proc_count << endl;	
+    	//if(rank == proc_of_interest) cout << "proc_count " << proc_count << endl;
 		//#endif
 
 		//cout << "proc count " << proc_count << endl;
@@ -764,12 +764,12 @@ namespace NWUClustering
 		vector <float> all_medians;
 		all_medians.resize(proc_count, 0);
 
-		MPI_Allgather(&median, sizeof(int), MPI_BYTE, &all_medians[0], sizeof(int), MPI_BYTE, new_comm);	
+		MPI_Allgather(&median, sizeof(int), MPI_BYTE, &all_medians[0], sizeof(int), MPI_BYTE, new_comm);
 
-  		median = findKMedian(all_medians, all_medians.size()/2); 
+  		median = findKMedian(all_medians, all_medians.size()/2);
 		all_medians.clear();
-		
-		return median;	
+
+		return median;
 	}
 
 	void compute_local_bounding_box(ClusteringAlgo& dbs, interval* box)
@@ -779,13 +779,13 @@ namespace NWUClustering
 		//we assume each processor has at least one point
 		//if(dbs.m_pts->m_i_num_points > 0)
 		{
-			
+
 			for(i = 0; i < dbs.m_pts->m_i_dims; i++)
 			{
 				box[i].upper = dbs.m_pts->m_points[0][i];
 				box[i].lower = dbs.m_pts->m_points[0][i];
 			}
-		
+
 			for(i = 0; i < dbs.m_pts->m_i_dims; i++)
 			{
 				for(j = 1; j < dbs.m_pts->m_i_num_points; j++)
@@ -802,7 +802,7 @@ namespace NWUClustering
 		/*else
 		{
 			// WHAT TO DO IF THERE IS NO POINTS
-			// FOR THE TIME BEING set 0 
+			// FOR THE TIME BEING set 0
 			for(i = 0; i < dbs.m_pts->m_i_dims; i++)
 			{
 				box[i].upper = 0;
@@ -811,33 +811,33 @@ namespace NWUClustering
 		}*/
 	}
 
-	void compute_global_bounding_box(ClusteringAlgo& dbs, interval* box, interval* gbox, int nproc)
+	void compute_global_bounding_box(MPI_Comm mpi_comm, ClusteringAlgo& dbs, interval* box, interval* gbox, int nproc)
 	{
 		int i, j, k;
-	
+
 		interval* gather_local_box = new interval[dbs.m_pts->m_i_dims * nproc];
-	
+
 		// gather the local bounding box first
-		MPI_Allgather(box, sizeof(interval) * dbs.m_pts->m_i_dims, MPI_BYTE, gather_local_box, 
-					sizeof(interval) * dbs.m_pts->m_i_dims, MPI_BYTE, MPI_COMM_WORLD);
+		MPI_Allgather(box, sizeof(interval) * dbs.m_pts->m_i_dims, MPI_BYTE, gather_local_box,
+					sizeof(interval) * dbs.m_pts->m_i_dims, MPI_BYTE, mpi_comm);
 
 		// compute the global bounding box
 		for(i = 0; i < dbs.m_pts->m_i_dims; i++)
 		{
 			gbox[i].lower = gather_local_box[i].lower;
 			gbox[i].upper = gather_local_box[i].upper;
-			
+
 			k = i;
 			for(j = 0; j < nproc; j++, k += dbs.m_pts->m_i_dims)
 			{
 				if(gbox[i].lower > gather_local_box[k].lower)
 					gbox[i].lower = gather_local_box[k].lower;
-				
+
 				if(gbox[i].upper < gather_local_box[k].upper)
                     gbox[i].upper = gather_local_box[k].upper;
 			}
 		}
-		
+
 		delete [] gather_local_box;
 	}
 
@@ -853,7 +853,7 @@ namespace NWUClustering
             }
         }
 	}
-	
+
 	void copy_box(ClusteringAlgo& dbs, interval* target_box, interval* source_box)
 	{
 			for(int j = 0; j < dbs.m_pts->m_i_dims; j++)
@@ -861,32 +861,6 @@ namespace NWUClustering
 				target_box[j].upper = source_box[j].upper;
 				target_box[j].lower = source_box[j].lower;
 			}
-	}
-
-	void print_points(ClusteringAlgo& dbs, int rank)
-	{
-		cout << "proc " << rank << " owned points: " << dbs.m_pts->m_points.size() << " verify " << dbs.m_pts->m_i_num_points << endl;
-		int u, v;
-
-		/*
-		for(u = 0; u < dbs.m_pts->m_i_num_points; u++)
-        {
-        	for(v = 0; v < dbs.m_pts->m_i_dims; v++)
-            	cout << dbs.m_pts->m_points[u][v] << " ";
-            cout << endl;
-        }
-		*/
-
-		cout << "proc " << rank << " outer points: " << dbs.m_pts_outer->m_points.size() << " verify " << dbs.m_pts_outer->m_i_num_points << endl;
-
-		/*
-		for(u = 0; u < dbs.m_pts_outer->m_i_num_points; u++)
-        {
-            for(v = 0; v < dbs.m_pts_outer->m_i_dims; v++)
-                cout << dbs.m_pts_outer->m_points[u][v] << " ";
-            cout << endl;
-        }
-		*/
 	}
 
     void print_box(ClusteringAlgo& dbs, int rank, interval* box)

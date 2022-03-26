@@ -22,31 +22,37 @@
 /*   Storage and Analysis (Supercomputing, SC'12), pp.62:1-62:11, 2012.	     */
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-A Disjoint-Set Data Structure based Parallel DBSCAN clustering implementation (MPI version)
 
-How to run the tool:
-1. Compile the source files using the following command
+#ifndef _UTILS_
+#define _UTILS_
 
-	make
+//#define _DEBUG
+#define proc_of_interest 0
+#define _GET_EXTRA_POINT_STAT 0
+#define _GET_LOCAL_POINT_COUNT 0
 
-2. Run using following command 
+#include <mpi.h>
+#include <algorithm>
+#include <vector>
+#include <cmath>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
 
-	mpiexec -n number_of_process ./mpi_dbscan -i filename -b -m minpts -e epsilon -o output[optional]
-	
-	Example:
 
-	mpiexec -n 8 ./mpi_dbscan -i clus50k.bin -b -m 5 -e 25 -o clus50k_clusters.nc
+#define POW2(x) (1 << (x))
+#define ROOT 1
+#define LOWER(i) ((i)<<1)
+#define UPPER(i) (((i)<<1)+1)
+#define PARENT(i) ((i)>>1)
+#define SIBLING(i) (((i)&1)?(i)-1:(i)+1)
 
-	run the following to get detail description on the program arguments
+using namespace std;
 
-	./mpi_dbscan ?
+typedef float point_coord_type;
+typedef vector <vector <point_coord_type> >         array2dfloat;
 
-3. Input file format:
-	
-	binary file:
-	number of points, N and number of dimensions, D (each 4 bytes) followed by the points coordinates (N x D floating point numbers).
+float findKMedian(vector<float>& A,int K);
 
-4. Output file format (Optional, one can get the statistics about the clustering solution without writing the clusters to file):
-
-	netCDF file:
-	The coodinates are named as columns (position_col_X1, position_col_X2, ...) and then one additional column named cluster_id for the corresponding cluster id the point belong to. 
+#endif
