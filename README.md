@@ -11,7 +11,7 @@ This project is a part of our work on parallelizing of the DBSCAN algorithm
 in the ClusterLogs framework. Check this paper: *Parallelizing of the DBSCAN
 algorithm in the ClusterLogs framework, International Journal of Modern Physics A,
 Vol. 37, No. 01, 2150247 (2022); Ivan Zherdev, Konstantin Zhukov, Maria Grigorieva
-and Sergey Korobkov*.
+and Sergey Korobkov*. Please cite the publication above if you use this package.
 
 This repo contains modified PDSDBSCAN-D:
 * Implemented a library-like interface. So now PDSDBSCAN can be called as a function.
