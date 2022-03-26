@@ -1,3 +1,9 @@
+# Modifiled PDSDBSCAN-D with SWIG Python wrapper
+
+With repo contains PDSDBSCAN-D with ability of running withut geometrical partitioning.
+
+Information about the original PDSDBSCAN algorithm can be found in this publication:
+
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 /*   Description: Implementation of scalable parallel DBSCAN algorithm       */
 /*				using the disjoint set data structure        */
@@ -17,14 +23,3 @@
 /*   International Conference on High Performance Computing, Networking,     */
 /*   Storage and Analysis (Supercomputing, SC'12), pp.62:1-62:11, 2012.	     */
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-Two versions of source code:
-
-1. parallel_multicore (for shared memory computers): 
-An OpenMP implementation of DBSCAN clustering algorithm using the disjoint set data structure.
-
-2. parallel_mpi (for distributed memory computers):
-An MPI implementation DBSCAN clustering algorithm using the disjoint set data structure.
-
-More details on how to use the code are available in the corresponding folder.
-

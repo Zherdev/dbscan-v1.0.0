@@ -1,8 +1,9 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-/*   Files: omp_main.cpp clusters.cpp  clusters.h utils.h utils.cpp          */
+/*   Files: mpi_main.cpp clusters.cpp  clusters.h utils.h utils.cpp          */
 /*   			dbscan.cpp dbscan.h kdtree2.cpp kdtree2.hpp          */
+/*			geometric_partitioning.h geometric_partitioning.cpp  */
 /*		    						             */
-/*   Description: an openmp implementation of dbscan clustering algorithm    */
+/*   Description: an mpi implementation of dbscan clustering algorithm       */
 /*				using the disjoint set data structure        */
 /*                                                                           */
 /*   Author:  Md. Mostofa Ali Patwary                                        */
@@ -21,47 +22,30 @@
 /*   Storage and Analysis (Supercomputing, SC'12), pp.62:1-62:11, 2012.	     */
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifndef _GEOMETRIC_PARTITIONING_
+#define _GEOMETRIC_PARTITIONING_
 
-
-#ifndef _DBSCAN_
-#define _DBSCAN_
-
+#include <mpi.h>
 #include "utils.h"
-#include "clusters.h"
+#include "dbscan.h"
+#include "kdtree2.hpp"
 
 namespace NWUClustering
 {
-	class ClusteringAlgo : public Clusters
-	{
-	public:
-		ClusteringAlgo(){ }
-		virtual ~ClusteringAlgo();
+	//void run_dbscan_algo_uf(ClusteringAlgo& dbs); // union find dbscan algorithm
+	//void run_dbscan_algo(ClusteringAlgo& dbs); // regular dbscan algorithm
 
-		// functions for dbscan algorithm
-		void set_dbscan_params(double eps, int minPts);
-		
-		void 	writeClusters(ostream& o); // regular dbscan algorithm
-		void    writeClusters_uf(ostream& o); // union find dbscan algorithm
+	void get_extra_points(MPI_Comm mpi_comm, ClusteringAlgo& dbs);
+	void start_partitioning(MPI_Comm mpi_comm, ClusteringAlgo& dbs);
 
-	public:
-		
-		// parameters to run dbscan algorithm
-		double 	m_epsSquare;
-		int 	m_minPts;
-		//int     m_parcent_of_data;
-  
-		// noise vector
-        	vector<bool> m_noise;
-	       	// noise vector
-        	vector<bool> m_visited;
-
-		vector <int> m_parents;
-		vector <int> m_corepoint;
-		vector <int> m_member;
-	};	
-
-	void run_dbscan_algo_uf(ClusteringAlgo& dbs); // union find dbscan algorithm
-	void run_dbscan_algo(ClusteringAlgo& dbs); // regular dbscan algorithm
+	void update_points(ClusteringAlgo& dbs, int s_count, vector <int>& invalid_pos_as, vector <float>& recv_buf);
+	int get_points_to_send(ClusteringAlgo& dbs, vector <float>& send_buf, vector <int>& invalid_pos_as, float median, int d, int rank, int partner_rank);
+	float get_median(MPI_Comm mpi_comm, ClusteringAlgo& dbs, int d, MPI_Comm& new_comm);
+	void compute_local_bounding_box(ClusteringAlgo& dbs, interval* box);
+	void compute_global_bounding_box(MPI_Comm mpi_comm, ClusteringAlgo& dbs, interval* box, interval* gbox, int nproc);
+	void copy_global_box_to_each_node(ClusteringAlgo& dbs, interval** nodes_gbox, interval* gbox, int internal_nodes);
+	void copy_box(ClusteringAlgo& dbs, interval* target_box, interval* source_box);
+	void print_box(ClusteringAlgo& dbs, int rank, interval* box);
 };
 
 #endif

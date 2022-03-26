@@ -1,8 +1,9 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-/*   Files: omp_main.cpp clusters.cpp  clusters.h utils.h utils.cpp          */
+/*   Files: mpi_main.cpp clusters.cpp  clusters.h utils.h utils.cpp          */
 /*   			dbscan.cpp dbscan.h kdtree2.cpp kdtree2.hpp          */
+/*			geometric_partitioning.h geometric_partitioning.cpp  */
 /*		    						             */
-/*   Description: an openmp implementation of dbscan clustering algorithm    */
+/*   Description: an mpi implementation of dbscan clustering algorithm       */
 /*				using the disjoint set data structure        */
 /*                                                                           */
 /*   Author:  Md. Mostofa Ali Patwary                                        */
@@ -21,39 +22,47 @@
 /*   Storage and Analysis (Supercomputing, SC'12), pp.62:1-62:11, 2012.	     */
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-
-#ifndef _CLUSTER_
-#define _CLUSTER_
+#ifndef _DBSCAN_
+#define _DBSCAN_
 
 #include "utils.h"
-#include "kdtree2.hpp"
+#include "clusters.h"
+#include <mpi.h>
 
 namespace NWUClustering
 {
-	struct Points
-	{
-		array2dfloat m_points;
-		int m_i_dims;
-		int m_i_num_points;
-	};
-
-	class Clusters
+	class ClusteringAlgo : public Clusters
 	{
 	public:
-		Clusters():m_pts(NULL),m_kdtree(NULL){ }
-		virtual ~Clusters();
+		ClusteringAlgo(){ }
+		virtual ~ClusteringAlgo();
 
-		int     read_file(char* infilename, int isBinaryFile);
-		int     build_kdtree();
-		
+		void set_dbscan_params(double eps, int minPts);
+		void get_clusters_distributed(MPI_Comm mpi_comm);
+		void write_clusters_to_array(int* output_cluster_ids) const;
+
+		void 	convert(vector< vector <int> >* data, int nproc, int rank, int round);
+		void 	trivial_compression(vector <int>* data, vector < vector <int> >* parser, int nproc, int rank, int round, double& comtime, double& sum_comp_rate);
+		void 	trivial_decompression(vector <int>* data, int nproc, int rank, int round, double& dcomtime);
+
 	public:
-		Points* 	m_pts;
-		kdtree2* 	m_kdtree;
-		vector <int> 	m_pid_to_cid; // point id to cluster id
-		vector <vector <int> > m_clusters;
-		int     m_parcent_of_data;
+
+		double 	m_epsSquare;
+		int 	m_minPts;
+ 		int 	m_messages_per_round;
+		int 	m_compression;
+
+        	vector<bool> m_noise;
+        	vector<bool> m_visited;
+		vector <int> m_parents;
+		vector <int> m_parents_pr;
+		vector <int> m_child_count;
+
+		vector <int> m_member;
+		vector <int> m_corepoint;
 	};
+
+	void run_dbscan_algo_uf_mpi_interleaved(MPI_Comm mpi_comm, ClusteringAlgo& dbs); // union find dbscan algorithm using mpi with interleaved communication
 };
 
 #endif
-

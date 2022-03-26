@@ -1,8 +1,9 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-/*   Files: omp_main.cpp clusters.cpp  clusters.h utils.h utils.cpp          */
+/*   Files: mpi_main.cpp clusters.cpp  clusters.h utils.h utils.cpp          */
 /*   			dbscan.cpp dbscan.h kdtree2.cpp kdtree2.hpp          */
+/*			geometric_partitioning.h geometric_partitioning.cpp  */
 /*		    						             */
-/*   Description: an openmp implementation of dbscan clustering algorithm    */
+/*   Description: an mpi implementation of dbscan clustering algorithm       */
 /*				using the disjoint set data structure        */
 /*                                                                           */
 /*   Author:  Md. Mostofa Ali Patwary                                        */
@@ -25,7 +26,12 @@
 #ifndef _UTILS_
 #define _UTILS_
 
-#include <omp.h>
+//#define _DEBUG
+#define proc_of_interest 0
+#define _GET_EXTRA_POINT_STAT 0
+#define _GET_LOCAL_POINT_COUNT 0
+
+#include <mpi.h>
 #include <algorithm>
 #include <vector>
 #include <cmath>
@@ -33,11 +39,20 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <stdlib.h>
-#include <getopt.h>
+
+
+#define POW2(x) (1 << (x))
+#define ROOT 1
+#define LOWER(i) ((i)<<1)
+#define UPPER(i) (((i)<<1)+1)
+#define PARENT(i) ((i)>>1)
+#define SIBLING(i) (((i)&1)?(i)-1:(i)+1)
+
 using namespace std;
+
 typedef float point_coord_type;
 typedef vector <vector <point_coord_type> >         array2dfloat;
+
 float findKMedian(vector<float>& A,int K);
 
 #endif

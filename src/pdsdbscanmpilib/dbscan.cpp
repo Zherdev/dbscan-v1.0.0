@@ -22,6 +22,7 @@
 /*   Storage and Analysis (Supercomputing, SC'12), pp.62:1-62:11, 2012.	     */
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#include <mpi.h>
 #include "dbscan.h"
 
 namespace NWUClustering
@@ -56,8 +57,8 @@ namespace NWUClustering
 		parser = (*data);
 		(*data).clear();
 
-		int pid_count = parser[0], pos, i, j, pid, npid, npid_count;
-		
+		int pid_count = parser[0], pos = 0, j, pid, npid_count;
+
 		pos++;
 
 		while(pid_count > 0)
@@ -80,7 +81,7 @@ namespace NWUClustering
 
 		dcomtime += (stop - start);
 	}
-	
+
 	void ClusteringAlgo::trivial_compression(vector <int>* data, vector < vector <int> >* parser, int nproc, int rank, int round, double& comtime, double& sum_comp_rate)
 	{
 		double start = MPI_Wtime();
@@ -89,7 +90,7 @@ namespace NWUClustering
 
 		pairs = (*data).size()/2;
 
-		org = (*data).size();		
+		org = (*data).size();
 
 		for(i = 0; i < pairs; i++)
 		{
@@ -103,7 +104,7 @@ namespace NWUClustering
 
 		pid_count = 0;
 		(*data).push_back(pid_count); // uniques pids, should update later
-			
+
 		for(i = 0; i < m_pts->m_i_num_points; i++)
 		{
 			npid_count = (*parser)[i].size();
@@ -113,18 +114,18 @@ namespace NWUClustering
 					(*data).push_back(npid_count);
 
 					for(j = 0; j < npid_count; j++)
-						(*data).push_back((*parser)[i][j]);						 
-					
+						(*data).push_back((*parser)[i][j]);
+
 					pid_count++;
 
 					(*parser)[i].clear();
 			}
 		}
-			
+
 		(*data)[0] = pid_count;
 
 		comp = (*data).size();
-		
+
 		double stop = MPI_Wtime();
 		comtime += (stop - start);
 
@@ -141,7 +142,7 @@ namespace NWUClustering
 		for(tid = 0; tid < nproc; tid++)
 		{
 			pairs = (*data)[tid].size()/2;
-			
+
 			verify.resize(2 * pairs, -1);
 
 			if(pairs == 0)
@@ -153,7 +154,7 @@ namespace NWUClustering
 			{
 				if((*data)[tid][2 * pid] < min)
 					min = (*data)[tid][2 * pid];
-				
+
 				if((*data)[tid][2 * pid] > max)
 					max  = (*data)[tid][2 * pid];
 
@@ -163,7 +164,7 @@ namespace NWUClustering
 
 			init.clear();
 			parser.resize(max - min + 1, init);
-			
+
 			for(pid = 0; pid < pairs; pid++)
 			{
 				v2 = (*data)[tid].back();
@@ -201,7 +202,7 @@ namespace NWUClustering
 			count = (*data)[tid][0];
 			int k = 1, size, u = 0;
 			for(pid = 0; pid < count; pid++)
-			{		
+			{
 				v2 = (*data)[tid][k++];
 				size = (*data)[tid][k++];
 
@@ -214,16 +215,16 @@ namespace NWUClustering
 
 					if(v1 != verify[u++])
                     				cout << "SOMETHING IS WRONG" << endl;
-				}	
+				}
 			}
 		}
 	}
 
-	void ClusteringAlgo::get_clusters_distributed()
+	void ClusteringAlgo::get_clusters_distributed(MPI_Comm mpi_comm)
 	{
 		int rank, nproc, i;
-        	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        	MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+        	MPI_Comm_rank(mpi_comm, &rank);
+        	MPI_Comm_size(mpi_comm, &nproc);
 
 		// get the root all the local points first
 		// store in a message buffer in case need to ask other processors
@@ -254,7 +255,7 @@ namespace NWUClustering
         	p_cur_insert = &merge_send2;
 
 		m_child_count.reserve(m_pts->m_i_num_points);
-		m_child_count.resize(m_pts->m_i_num_points, 0);		
+		m_child_count.resize(m_pts->m_i_num_points, 0);
 
 		int root, local_continue_to_run = 0, global_continue_to_run;
 		for(i = 0; i < m_pts->m_i_num_points; i++)
@@ -267,13 +268,13 @@ namespace NWUClustering
 					break;
 				root = m_parents[root];
 			}
-			
+
 			if(m_parents[root] == root && m_parents_pr[root] == rank) // root is a local root
 			{
 				// set the root of i directly to root
 				m_parents[i] = root;
 				m_child_count[root] = m_child_count[root] + 1; // increase the child count by one
-				//m_parents_pr[i] = rank; // NO NEED TO SET THIS AS IT				
+				//m_parents_pr[i] = rank; // NO NEED TO SET THIS AS IT
 			}
 			else
 			{
@@ -282,22 +283,19 @@ namespace NWUClustering
                			(*p_cur_insert)[m_parents_pr[root]].push_back(i);
             			(*p_cur_insert)[m_parents_pr[root]].push_back(rank);
 				local_continue_to_run++;
-			}			
+			}
 		}
-		
-		// MAY BE REMOVED
-		//MPI_Barrier(MPI_COMM_WORLD);
 
 		int pos, round = 0, quadraples, scount, tid, tag = 0, rtag, rsource, rcount, isend[nproc], irecv[nproc], flag;
 
-		MPI_Request s_req_recv[nproc], s_req_send[nproc], d_req_send[nproc], d_req_recv[nproc]; // better to malloc the memory
-        	MPI_Status  s_stat, d_stat_send[nproc], d_stat;
+		MPI_Request d_req_send[nproc], d_req_recv[nproc]; // better to malloc the memory
+		MPI_Status d_stat_send[nproc], d_stat;
 		int target_point, source_point, source_pr;
 
 		while(1)
 		{
 			global_continue_to_run = 0;
-            		MPI_Allreduce(&local_continue_to_run, &global_continue_to_run, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+            		MPI_Allreduce(&local_continue_to_run, &global_continue_to_run, 1, MPI_INT, MPI_SUM, mpi_comm);
 
             		if(global_continue_to_run == 0)
                 		break;
@@ -308,19 +306,19 @@ namespace NWUClustering
 
 			for(tid = 0; tid < nproc; tid++)
            			(*p_cur_insert)[tid].clear();
-	
+
 			scount = 0;
 			for(tid = 0; tid < nproc; tid++)
 			{
 				isend[tid] = (*p_cur_send)[tid].size();
             			if(isend[tid] > 0)
 	            		{
-    	        			MPI_Isend(&(*p_cur_send)[tid][0], isend[tid], MPI_INT, tid, tag + 1, MPI_COMM_WORLD, &d_req_send[scount]);
+    	        			MPI_Isend(&(*p_cur_send)[tid][0], isend[tid], MPI_INT, tid, tag + 1, mpi_comm, &d_req_send[scount]);
         	        		scount++;
 	            		}
 			}
 
-			MPI_Alltoall(&isend[0], 1, MPI_INT, &irecv[0], 1, MPI_INT, MPI_COMM_WORLD);
+			MPI_Alltoall(&isend[0], 1, MPI_INT, &irecv[0], 1, MPI_INT, mpi_comm);
 
 			rcount = 0;
 			for(tid = 0; tid < nproc; tid++)
@@ -329,20 +327,20 @@ namespace NWUClustering
 				{
 					merge_received[tid].clear();
 					merge_received[tid].assign(irecv[tid], -1);
-					MPI_Irecv(&merge_received[tid][0], irecv[tid], MPI_INT, tid, tag + 1, MPI_COMM_WORLD, &d_req_recv[rcount]);
+					MPI_Irecv(&merge_received[tid][0], irecv[tid], MPI_INT, tid, tag + 1, mpi_comm, &d_req_recv[rcount]);
 					rcount++;
 				}
 			}
 
 			local_continue_to_run = 0;
-			
+
 			for(tid = 0; tid < rcount; tid++)
 			{
 				MPI_Waitany(rcount, &d_req_recv[0], &pos, &d_stat);
-			
+
 				rtag = d_stat.MPI_TAG;
 				rsource = d_stat.MPI_SOURCE;
-	
+
 				if(rtag == tag + 1)
 				{
 					quadraples = merge_received[rsource].size()/4;
@@ -358,12 +356,12 @@ namespace NWUClustering
 
                         			target_point = merge_received[rsource].back();
                         			merge_received[rsource].pop_back();
-			
+
 						flag = merge_received[rsource].back();
                         			merge_received[rsource].pop_back();
 
 						if(flag == 0)
-						{					
+						{
 							root = target_point;
 							while(m_parents_pr[root] == rank)
 							{
@@ -371,12 +369,12 @@ namespace NWUClustering
 									break;
 								root = m_parents[root];
 							}
-			
+
 							if(m_parents[root] == root && m_parents_pr[root] == rank) // root is a local root
 							{
 								m_child_count[root] = m_child_count[root] + 1; // increase the child count by one
 								// have to return the child about root
-								
+
                                 				(*p_cur_insert)[source_pr].push_back(1);
                                 				(*p_cur_insert)[source_pr].push_back(source_point);
                                 				(*p_cur_insert)[source_pr].push_back(m_parents[root]);
@@ -410,9 +408,6 @@ namespace NWUClustering
 				MPI_Waitall(scount, &d_req_send[0], &d_stat_send[0]); // wait for all the sending operation
 		}
 
-		// MAY BE REMOVED
-		//MPI_Barrier(MPI_COMM_WORLD);
-
 		int final_cluster_root = 0, total_final_cluster_root = 0;
 
 		int points_in_cluster_final = 0, total_points_in_cluster_final = 0;
@@ -425,12 +420,12 @@ namespace NWUClustering
 				final_cluster_root++;
 			}
 		}
-		
-		MPI_Allreduce(&points_in_cluster_final, &total_points_in_cluster_final, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-		MPI_Allreduce(&final_cluster_root, &total_final_cluster_root, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+		MPI_Allreduce(&points_in_cluster_final, &total_points_in_cluster_final, 1, MPI_INT, MPI_SUM, mpi_comm);
+		MPI_Allreduce(&final_cluster_root, &total_final_cluster_root, 1, MPI_INT, MPI_SUM, mpi_comm);
 
 		int total_points = 0;
-		MPI_Allreduce(&m_pts->m_i_num_points, &total_points, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce(&m_pts->m_i_num_points, &total_points, 1, MPI_INT, MPI_SUM, mpi_comm);
 
         	if(rank == proc_of_interest) cout << "Points in clusters " << total_points_in_cluster_final << " Noise " << total_points - total_points_in_cluster_final << " Total points " << total_points << endl;
 
@@ -438,8 +433,8 @@ namespace NWUClustering
 
 		vector<int> global_roots;
 		global_roots.resize(nproc, 0);
-		MPI_Allgather(&final_cluster_root, sizeof(int), MPI_BYTE, &global_roots[0], sizeof(int), MPI_BYTE, MPI_COMM_WORLD);	
-	
+		MPI_Allgather(&final_cluster_root, sizeof(int), MPI_BYTE, &global_roots[0], sizeof(int), MPI_BYTE, mpi_comm);
+
 
 		int cluster_offset = 0;
 
@@ -463,7 +458,7 @@ namespace NWUClustering
 					m_pid_to_cid[i] = 0; // noise point
 			}
 		}
-			
+
 		for(i = 0; i < m_pts->m_i_num_points; i++)
 		{
 			if(m_parents_pr[i] == rank)
@@ -482,9 +477,6 @@ namespace NWUClustering
 				(*p_cur_insert)[m_parents_pr[i]].push_back(rank);
 			}
 		}
-		
-		// MAY BE REMOVED
-		//MPI_Barrier(MPI_COMM_WORLD);
 
 		tag++;
 
@@ -497,19 +489,19 @@ namespace NWUClustering
 
 			for(tid = 0; tid < nproc; tid++)
            			(*p_cur_insert)[tid].clear();
-	
+
 			scount = 0;
 			for(tid = 0; tid < nproc; tid++)
 			{
 				isend[tid] = (*p_cur_send)[tid].size();
             			if(isend[tid] > 0)
 	            		{
-    	        			MPI_Isend(&(*p_cur_send)[tid][0], isend[tid], MPI_INT, tid, tag + 1, MPI_COMM_WORLD, &d_req_send[scount]);
+    	        			MPI_Isend(&(*p_cur_send)[tid][0], isend[tid], MPI_INT, tid, tag + 1, mpi_comm, &d_req_send[scount]);
         	        		scount++;
 	            		}
 			}
 
-			MPI_Alltoall(&isend[0], 1, MPI_INT, &irecv[0], 1, MPI_INT, MPI_COMM_WORLD);
+			MPI_Alltoall(&isend[0], 1, MPI_INT, &irecv[0], 1, MPI_INT, mpi_comm);
 
 			rcount = 0;
 			for(tid = 0; tid < nproc; tid++)
@@ -518,7 +510,7 @@ namespace NWUClustering
 				{
 					merge_received[tid].clear();
 					merge_received[tid].assign(irecv[tid], -1);
-					MPI_Irecv(&merge_received[tid][0], irecv[tid], MPI_INT, tid, tag + 1, MPI_COMM_WORLD, &d_req_recv[rcount]);
+					MPI_Irecv(&merge_received[tid][0], irecv[tid], MPI_INT, tid, tag + 1, mpi_comm, &d_req_recv[rcount]);
 					rcount++;
 				}
 			}
@@ -526,10 +518,10 @@ namespace NWUClustering
 			for(tid = 0; tid < rcount; tid++)
 			{
 				MPI_Waitany(rcount, &d_req_recv[0], &pos, &d_stat);
-			
+
 				rtag = d_stat.MPI_TAG;
 				rsource = d_stat.MPI_SOURCE;
-	
+
 				if(rtag == tag + 1)
 				{
 					quadraples = merge_received[rsource].size()/4;
@@ -545,12 +537,12 @@ namespace NWUClustering
 
                         			target_point = merge_received[rsource].back();
                         			merge_received[rsource].pop_back();
-			
+
 						flag = merge_received[rsource].back();
                         			merge_received[rsource].pop_back();
 
 						if(flag == 0)
-						{					
+						{
                         				(*p_cur_insert)[source_pr].push_back(1);
                            				(*p_cur_insert)[source_pr].push_back(source_point);
                             				(*p_cur_insert)[source_pr].push_back(m_pid_to_cid[m_parents[target_point]]);
@@ -567,8 +559,7 @@ namespace NWUClustering
 
             		if(scount > 0)
                 		MPI_Waitall(scount, &d_req_send[0], &d_stat_send[0]); // wait for all the sending operation
-		
-			//MPI_Barrier(MPI_COMM_WORLD); // MAY NEED TO ACTIVATE THIS
+
 			tag++;
 		}
 
@@ -579,164 +570,34 @@ namespace NWUClustering
 		global_roots.clear();
 	}
 
-	void ClusteringAlgo::writeCluster_distributed(string outfilename)
+	void ClusteringAlgo::write_clusters_to_array(int* output_cluster_ids) const
 	{
-		int rank, nproc;
-		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-		MPI_Comm_size(MPI_COMM_WORLD, &nproc);
-
-		int i;
-
-		// get the total number of points
-		int total_points = 0;
-		MPI_Allreduce(&m_pts->m_i_num_points, &total_points, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-	
-		vector<int> point_count;
-        	point_count.resize(nproc, 0);
-        	MPI_Allgather(&m_pts->m_i_num_points, sizeof(int), MPI_BYTE, &point_count[0], sizeof(int), MPI_BYTE, MPI_COMM_WORLD);
-
-		int ret, ncfile;
-		
-		string outfilename_dis = outfilename;
-		outfilename_dis = outfilename_dis; //"_clusters.nc";
-	
-		// create the file, if exists, open the file.
-		ret = ncmpi_create(MPI_COMM_WORLD, outfilename_dis.c_str(), NC_CLOBBER, MPI_INFO_NULL, &ncfile);	
-        	if (ret != NC_NOERR)    
-		{
-        		handle_error(ret, __LINE__);
-            		return;
-        	}	
-
-		MPI_Offset num_particles = total_points;
-		int num_particles_id;
-
-		ret = ncmpi_def_dim(ncfile, "num_particles", num_particles, &num_particles_id);
-        	if (ret != NC_NOERR)
-        	{
-            		handle_error(ret, __LINE__);
-            		return;
-        	}
-		
-       		string column_name_initial = "position_col_X";
-        	stringstream column_name_id;
-        	string column_name;
-
-		int j, ncolumn = 1, col_id = 0, varid[m_pts->m_i_dims + 1]; //number of column is 1, col_id is 0 as we use the first one
-
-        	// write the columns
-        	for(j = 0; j < m_pts->m_i_dims; j++)
-        	{
-        		column_name_id.str("");
-        		column_name_id << j;
-        
-       			column_name = column_name_initial + column_name_id.str(); 
-        	
-			ret = ncmpi_def_var(ncfile, column_name.c_str(), NC_FLOAT, ncolumn, &col_id, &varid[j]);        	
-			if (ret != NC_NOERR) 
-        		{
-            			handle_error(ret, __LINE__);
-    	        		return;
-        		}        
-     		}
-
-		column_name = "cluster_id";
-
-        	ret = ncmpi_def_var(ncfile, column_name.c_str(), NC_INT, ncolumn, &col_id, &varid[j]);
-        	if (ret != NC_NOERR)
-        	{
-        		handle_error(ret, __LINE__);
-            		return;
-        	}
-
-  		ret = ncmpi_enddef(ncfile);
-  		if (ret != NC_NOERR) 
-		{
-			handle_error(ret, __LINE__);
-			return;
-		}
-
-		MPI_Offset start[2], count[2];
-			
-		start[0] = 0;
-		for(i = 0; i < rank; i++)
-		{
-			start[0] += point_count[i];	
-		}
-
-		count[0] = point_count[rank];
-		start[1] = 0; // this to satisfy PnetCDF requirement
-		count[1] = 1;//dim_sizes[dimids[1]];
-		
-		// allocate memory	
-		float *data = new float[count[0] * count[1]];
-
-		// write the data columns
-		for(j = 0; j < m_pts->m_i_dims; j++)
-		{
-			// get the partial column data
-			for(i = 0; i < m_pts->m_i_num_points; i++)
-				data[i] = m_pts->m_points[i][j];
-
-			// write the data
-			ret = ncmpi_put_vara_float_all(ncfile, varid[j], start, count, data);
-			if (ret != NC_NOERR) 
-			{
-				handle_error(ret, __LINE__);
-				return;
-			}
-		}
-		delete [] data;
-
-		int	*data_id = new int[count[0] * count[1]];		
-
-		//write the cluster_ids
-		for(i = 0; i < m_pts->m_i_num_points; i++)
-			data_id[i] = m_pid_to_cid[i];
-
-		ret = ncmpi_put_vara_int_all(ncfile, varid[m_pts->m_i_dims], start, count, data_id);
-		if (ret != NC_NOERR)
-        	{
-        		handle_error(ret, __LINE__);
-            		return;
-        	}
-
-		delete [] data_id;	
-
-		// close the file
-		ret = ncmpi_close(ncfile);
-		if (ret != NC_NOERR) 
-		{
-			handle_error(ret, __LINE__);
-			return;
-		}
-	
-		//cout << "rank " << rank << " AT the end of wrting PnetCDF file" << endl;
+		std::copy(m_pid_to_cid.begin(), m_pid_to_cid.end(), output_cluster_ids);
 	}
 
-	void run_dbscan_algo_uf_mpi_interleaved(ClusteringAlgo& dbs)
+	void run_dbscan_algo_uf_mpi_interleaved(MPI_Comm mpi_comm, ClusteringAlgo& dbs)
 	{
-		double start = MPI_Wtime();			
-		int i, pid, j, k, npid, prID;
-		int rank, nproc, mpi_namelen;
+		double start = MPI_Wtime();
+		int i, pid, j, k, npid;
+		int rank, nproc;
 		kdtree2_result_vector ne;
 		kdtree2_result_vector ne_outer;
 
-		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    		MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+		MPI_Comm_rank(mpi_comm, &rank);
+    		MPI_Comm_size(mpi_comm, &nproc);
 
         	// initialize some parameters
 		dbs.m_clusters.clear();
-			
+
 		// assign parent to itestf
 		dbs.m_parents.resize(dbs.m_pts->m_i_num_points, -1);
 		dbs.m_parents_pr.resize(dbs.m_pts->m_i_num_points, -1);
 
 		int total_points = 0, points_per_pr[nproc], start_pos[nproc];
 
-	        // getting the total number of local points and assigning postions	
-		MPI_Allgather(&dbs.m_pts->m_i_num_points, 1, MPI_INT, &points_per_pr[0], 1, MPI_INT, MPI_COMM_WORLD);
-		
+	        // getting the total number of local points and assigning postions
+		MPI_Allgather(&dbs.m_pts->m_i_num_points, 1, MPI_INT, &points_per_pr[0], 1, MPI_INT, mpi_comm);
+
 		for(i = 0; i < nproc; i++)
 		{
 			start_pos[i] = total_points;
@@ -761,13 +622,12 @@ namespace NWUClustering
 		dbs.m_corepoint.resize(dbs.m_pts->m_i_num_points, 0);
 
 		vector<int>* ind = dbs.m_kdtree->getIndex();
-		vector<int>* ind_outer = dbs.m_kdtree_outer->getIndex();
 
 		// setting paretns to itself and corresponding proc IDs
 		for(i = 0; i < dbs.m_pts->m_i_num_points; i++)
 		{
 			pid = (*ind)[i];
-			
+
 			dbs.m_parents[pid] = pid;
 			dbs.m_parents_pr[pid] = rank;
 		}
@@ -777,11 +637,11 @@ namespace NWUClustering
 		vector < vector <int > > merge_send2;
 		vector <int> init;
 		int rtag, rsource, tag = 0, pos = 0, scount, rcount, isend[nproc], irecv[nproc];
-		
+
 		merge_received.resize(nproc, init);
 		merge_send1.resize(nproc, init);
 		merge_send2.resize(nproc, init);
-		
+
 		// reserving communication buffer memory
 		for(pid = 0; pid < nproc; pid++)
 		{
@@ -799,20 +659,20 @@ namespace NWUClustering
 		p_cur_send = &merge_send1;
 		p_cur_insert = &merge_send2;
 
-		if(rank == proc_of_interest) cout << "Init time " << MPI_Wtime() - start << endl;	
+		if(rank == proc_of_interest) cout << "Init time " << MPI_Wtime() - start << endl;
 
-		MPI_Barrier(MPI_COMM_WORLD);
-	
+		MPI_Barrier(mpi_comm);
+
 		// the main part of the DBSCAN algorithm (called local computation)
 		start = MPI_Wtime();
 		for(i = 0; i < dbs.m_pts->m_i_num_points; i++)
 		{
 			pid = (*ind)[i];
-			
+
 			// getting the local neighborhoods of local point
 			ne.clear();
             		dbs.m_kdtree->r_nearest_around_point(pid, 0, dbs.m_epsSquare, ne);
-			
+
  			ne_outer.clear();
 			vector<float> qv(dbs.m_pts->m_i_dims);
 
@@ -822,28 +682,28 @@ namespace NWUClustering
 			// getting the remote neighborhood of the local point
 			if(dbs.m_pts_outer->m_i_num_points > 0)
 				dbs.m_kdtree_outer->r_nearest(qv, dbs.m_epsSquare, ne_outer);
-		
+
 			qv.clear();
-			
-			if(ne.size() + ne_outer.size() >= dbs.m_minPts)
+
+			if(ne.size() + ne_outer.size() >= (size_t)dbs.m_minPts)
 			{
 				// pid is a core point
 				root = pid;
 
 				dbs.m_corepoint[pid] = 1;
 				dbs.m_member[pid] = 1;
-				
-				// traverse the rmote neighbors and add in the communication buffers	
-				for(j = 0; j < ne_outer.size(); j++)
+
+				// traverse the rmote neighbors and add in the communication buffers
+				for(j = 0; (size_t)j < ne_outer.size(); j++)
 				{
 					npid = ne_outer[j].idx;
 
 					(*p_cur_insert)[dbs.m_pts_outer->m_prIDs[npid]].push_back(pid);
                     			(*p_cur_insert)[dbs.m_pts_outer->m_prIDs[npid]].push_back(dbs.m_pts_outer->m_ind[npid]);
 				}
-				
+
 				//traverse the local neighbors and perform union operation
-				for (j = 0; j < ne.size(); j++)
+				for (j = 0; (size_t)j < ne.size(); j++)
                 		{
 					npid = ne[j].idx;
 
@@ -883,37 +743,34 @@ namespace NWUClustering
 
 				                            	// splicing compressio technique
 			                            		int z = dbs.m_parents[root2];
-                        				    	dbs.m_parents[root2] = dbs.m_parents[root1];                  
+                        				    	dbs.m_parents[root2] = dbs.m_parents[root1];
     								root2 = z;
 							}
 						}
 					}
 				}
-				
+
 			}
 		}
-			
-		MPI_Barrier(MPI_COMM_WORLD);
+
+		MPI_Barrier(mpi_comm);
 
 		int v1, v2, par_proc, triples, local_count, global_count;
-		double temp_inter_med, inter_med, stop = MPI_Wtime();
+		double stop = MPI_Wtime();
 
 		if(rank == proc_of_interest) cout << "Local computation took " << stop - start << endl;
 
-		inter_med = MPI_Wtime();
-
-
 		start = stop;
 		i = 0;
-			
-		MPI_Request s_req_recv[nproc], s_req_send[nproc], d_req_send[nproc], d_req_recv[nproc]; // better to malloc the memory
-		MPI_Status  s_stat, d_stat_send[nproc], d_stat;
+
+		MPI_Request d_req_send[nproc], d_req_recv[nproc]; // better to malloc the memory
+		MPI_Status  d_stat_send[nproc], d_stat;
 
 		start = MPI_Wtime();
 
 		local_count = 0;
-	
-		// performing additional compression for the local points that are being sent 
+
+		// performing additional compression for the local points that are being sent
 		// this steps identifies the points that actually going to connect the trees in other processors
 		// this step will eventually helps further compression before the actual communication happens
 		for(tid = 0; tid < nproc; tid++)
@@ -941,22 +798,21 @@ namespace NWUClustering
 		}
 
 		local_count = local_count/nproc;
-        	
+
 		global_count = 0;
-        	MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+        	MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, mpi_comm);
 
 		//message_per_round
-		int uv, uf, um, ul, ucount;
 		int local_continue_to_run, global_continue_to_run;
 		double dcomtime = 0, comtime = 0, sum_comp_rate = 0;
 		vector <vector <int> > parser;
 		vector <int> init_ex;
 		parser.resize(dbs.m_pts->m_i_num_points, init_ex);
-		
+
 		while(1)
 		{
 			pswap = p_cur_insert;
-            		p_cur_insert = p_cur_send;  
+            		p_cur_insert = p_cur_send;
             		p_cur_send = pswap;
 
             		for(tid = 0; tid < nproc; tid++)
@@ -967,11 +823,11 @@ namespace NWUClustering
 			//{
 			//	dbs.trivial_compression(p_cur_send, &parser, nproc, rank, i, comtime, sum_comp_rate);
 			//}
-			
+
 			// send all the data
 			// compress the data before send
 			//dbs.convert(p_cur_send, nproc, rank, i);
-		
+
 			scount = 0;
 			for(tid = 0; tid < nproc; tid++)
 			{
@@ -983,12 +839,12 @@ namespace NWUClustering
 				isend[tid] = (*p_cur_send)[tid].size();
             	    		if(isend[tid] > 0)
 	                	{
-    	                		MPI_Isend(&(*p_cur_send)[tid][0], isend[tid], MPI_INT, tid, tag + 1, MPI_COMM_WORLD, &d_req_send[scount]);
+    	                		MPI_Isend(&(*p_cur_send)[tid][0], isend[tid], MPI_INT, tid, tag + 1, mpi_comm, &d_req_send[scount]);
         	            		scount++;
 	                	}
 			}
 
-			MPI_Alltoall(&isend[0], 1, MPI_INT, &irecv[0], 1, MPI_INT, MPI_COMM_WORLD);
+			MPI_Alltoall(&isend[0], 1, MPI_INT, &irecv[0], 1, MPI_INT, mpi_comm);
 
 			rcount = 0;
 			for(tid = 0; tid < nproc; tid++)
@@ -997,22 +853,22 @@ namespace NWUClustering
 				{
 					merge_received[tid].clear();
 					merge_received[tid].assign(irecv[tid], -1);
-					MPI_Irecv(&merge_received[tid][0], irecv[tid], MPI_INT, tid, tag + 1, MPI_COMM_WORLD, &d_req_recv[rcount]);
+					MPI_Irecv(&merge_received[tid][0], irecv[tid], MPI_INT, tid, tag + 1, mpi_comm, &d_req_recv[rcount]);
 						rcount++;
 				}
 			}
 
 			local_count = 0;
-			
+
 			//get the data and process them
 			for(tid = 0; tid < rcount; tid++)
 			{
 				MPI_Waitany(rcount, &d_req_recv[0], &pos, &d_stat);
-			
+
 				rtag = d_stat.MPI_TAG;
 				rsource = d_stat.MPI_SOURCE;
-	
-				if(rtag == tag + 1)	
+
+				if(rtag == tag + 1)
 				{
 					// process received the data now
 					if(dbs.m_messages_per_round == -1 && i == 0)
@@ -1030,7 +886,7 @@ namespace NWUClustering
 							triples = merge_received[rsource].size()/2;
 							par_proc = rsource;
 						}
-					}						
+					}
 					else
 						triples = merge_received[rsource].size()/3;
 
@@ -1039,29 +895,29 @@ namespace NWUClustering
 						// get the pair
 						v1 = merge_received[rsource].back();
 						merge_received[rsource].pop_back();
-						
+
 						if((dbs.m_messages_per_round == -1 && i > 0) || (dbs.m_messages_per_round != -1))
 						{
 							par_proc = merge_received[rsource].back();
 							merge_received[rsource].pop_back();
 						}
-				
+
 						v2 = merge_received[rsource].back();
 						merge_received[rsource].pop_back();
-				
+
 						int con = 0;
-						
+
 						if(i > 0)
 							con = 1;
 						else if (i == 0 && (dbs.m_corepoint[v1] == 1 || dbs.m_member[v1] == 0))
-						{	
+						{
 							dbs.m_member[v1] = 1;
 							con = 1;
 						}
 
 						if(con == 1)
 						{
-				
+
 							root1 = v1;
 							// this will find the boundary vertex or the root if the root is in this processor
 							while(dbs.m_parents_pr[root1] == rank)
@@ -1071,7 +927,7 @@ namespace NWUClustering
 
 								root1 = dbs.m_parents[root1];
 							}
-				
+
 							// compress the local path
 							while(v1 != root1 && vec_prID[v1] == rank)
 							{
@@ -1079,19 +935,19 @@ namespace NWUClustering
 								dbs.m_parents[v1] = root1;
 								v1 = tmp;
 							}
-	
+
 							if(dbs.m_parents[root1] == v2 && dbs.m_parents_pr[root1] == par_proc)
 							{
 								//same_set++;
 								continue;
-							}						
-								
+							}
+
 							if(par_proc == rank)
 							{
 								if(dbs.m_parents[root1] == dbs.m_parents[v2])
 									continue;
 							}
-								
+
 							if(dbs.m_parents[root1] == root1 && dbs.m_parents_pr[root1] == rank) // root1 is a local root
 							{
 								if(start_pos[rank] + root1 < start_pos[par_proc] + v2)
@@ -1120,7 +976,7 @@ namespace NWUClustering
                        	    						(*p_cur_insert)[dbs.m_parents_pr[root1]].push_back(v2);
 									(*p_cur_insert)[dbs.m_parents_pr[root1]].push_back(par_proc);
 									(*p_cur_insert)[dbs.m_parents_pr[root1]].push_back(dbs.m_parents[root1]);
-										
+
 									local_count++;
 								}
 								else
@@ -1135,7 +991,7 @@ namespace NWUClustering
 							}
 						}
 					}
-					
+
 					merge_received[rsource].clear();
 				}
 				else
@@ -1143,12 +999,12 @@ namespace NWUClustering
 					cout << "rank " << rank << " SOMETHING IS WRONG" << endl;
 				}
 			}
-				
+
 			if(scount > 0)
-				MPI_Waitall(scount, &d_req_send[0], &d_stat_send[0]);	
+				MPI_Waitall(scount, &d_req_send[0], &d_stat_send[0]);
 
 			tag += 2; // change the tag value although not important
-			
+
 			local_continue_to_run = 0;
 			local_count = 0;
 			for(tid = 0; tid < nproc; tid++)
@@ -1157,20 +1013,20 @@ namespace NWUClustering
 				if((*p_cur_insert)[tid].size() > 0)
 					local_continue_to_run = 1;
 			}
-			
+
 			local_count = local_count / nproc;
 
 			global_count = 0;
 			global_continue_to_run = 0;
-            
-			MPI_Allreduce(&local_continue_to_run, &global_continue_to_run, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-			
+
+			MPI_Allreduce(&local_continue_to_run, &global_continue_to_run, 1, MPI_INT, MPI_SUM, mpi_comm);
+
 			if(global_continue_to_run == 0)
                 		break;
 			i++;
 		}
 
-		stop = MPI_Wtime(); 
+		stop = MPI_Wtime();
         	if(rank == proc_of_interest) cout << "Merging took " << stop - start << endl;
 
 		pswap = NULL;
@@ -1188,7 +1044,6 @@ namespace NWUClustering
 		merge_send1.clear();
 		merge_send2.clear();
 		ind = NULL;
-		ind_outer = NULL;
 
 		vec_prID.clear();
 		ne.clear();

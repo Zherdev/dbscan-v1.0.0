@@ -1,8 +1,9 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-/*   Files: omp_main.cpp clusters.cpp  clusters.h utils.h utils.cpp          */
+/*   Files: mpi_main.cpp clusters.cpp  clusters.h utils.h utils.cpp          */
 /*   			dbscan.cpp dbscan.h kdtree2.cpp kdtree2.hpp          */
+/*			geometric_partitioning.h geometric_partitioning.cpp  */
 /*		    						             */
-/*   Description: an openmp implementation of dbscan clustering algorithm    */
+/*   Description: an mpi implementation of dbscan clustering algorithm       */
 /*				using the disjoint set data structure        */
 /*                                                                           */
 /*   Author:  Md. Mostofa Ali Patwary                                        */
@@ -21,30 +22,6 @@
 /*   Storage and Analysis (Supercomputing, SC'12), pp.62:1-62:11, 2012.	     */
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+A Disjoint-Set Data Structure based Parallel DBSCAN clustering implementation (MPI version)
 
-A Disjoint-Set Data Structure based Parallel DBSCAN clustering implementation (OpenMP version)
-
-How to run the tool:
-1. Compile the source files using the following command
-
-	make
-
-2. Run using following command 
-
-	./omp_dbscan -i filename -b -m minpts -e epsilon -o output -t threads
-
-	Example:
-
-	./omp_dbscan -i clus50k.bin -b -m 5 -e 25 -t 8 -o test
-
-	run the following to get detail description on the program arguments
-
-	./omp_dbscan ?
-
-3. Input file format:
-	
-	binary file:
-	number of points, N and number of dimensions, D (each 4 bytes) followed by the points coordinates (N x D floating point numbers).
-
-	text file:
-	each line is a point (no need to mention the number of points or the number of dimensions).
+Transformed to a library-like package, see lib_interface.hpp.
