@@ -1,3 +1,9 @@
+This directory contains CPP-sources of the PDSDBSCAN-D, SWIG interface files
+and also a library-like header `lib_interface.hpp`.
+
+`run_pdsdbscan()` function is an entry point.
+
+```
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 /*   Files: mpi_main.cpp clusters.cpp  clusters.h utils.h utils.cpp          */
 /*   			dbscan.cpp dbscan.h kdtree2.cpp kdtree2.hpp          */
@@ -21,7 +27,4 @@
 /*   International Conference on High Performance Computing, Networking,     */
 /*   Storage and Analysis (Supercomputing, SC'12), pp.62:1-62:11, 2012.	     */
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-A Disjoint-Set Data Structure based Parallel DBSCAN clustering implementation (MPI version)
-
-Transformed to a library-like package, see lib_interface.hpp.
+```
