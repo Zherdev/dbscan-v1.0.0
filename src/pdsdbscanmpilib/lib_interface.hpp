@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <mpi.h>
+
 #define RESULT_OK 0
 #define RESULT_WRONG_INPUT 1
 #define RESULT_BAD_NUMBER_OF_PROCESSES 2

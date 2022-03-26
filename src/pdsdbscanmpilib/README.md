@@ -5,11 +5,7 @@ and also a library-like header `lib_interface.hpp`.
 
 ```
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-/*   Files: mpi_main.cpp clusters.cpp  clusters.h utils.h utils.cpp          */
-/*   			dbscan.cpp dbscan.h kdtree2.cpp kdtree2.hpp          */
-/*			geometric_partitioning.h geometric_partitioning.cpp  */
-/*		    						             */
-/*   Description: an mpi implementation of dbscan clustering algorithm       */
+/*   Description: Implementation of scalable parallel DBSCAN algorithm       */
 /*				using the disjoint set data structure        */
 /*                                                                           */
 /*   Author:  Md. Mostofa Ali Patwary                                        */
