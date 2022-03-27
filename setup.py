@@ -62,4 +62,9 @@ setup(
   cmdclass     = {
       'build_py': BuildPy,
   },
+  install_requires = [
+    'mpi4py>=3.0.3',
+    'numpy>=1.18.1'
+  ],
+  python_requires=">=3.6",
 )
