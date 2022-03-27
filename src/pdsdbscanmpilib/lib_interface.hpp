@@ -12,7 +12,7 @@
 #define RESULT_BAD_NUMBER_OF_PROCESSES 2
 
 int run_pdsdbscan(
-  MPI_Comm     world_comm,
+  MPI_Comm     mpi_comm,
   const float* input_vectors,
   int          input_len,
   int          input_dims,
