@@ -6,4 +6,5 @@ src/pdsdbscanmpilib/__pycache__
 src/pdsdbscanmpilib/pdsdbscan.py
 src/pdsdbscanmpilib/pdsdbscan_wrap.c
 src/pdsdbscanmpilib/*.so
+src/pdsdbscanmpilib/pdsdbscan_wrap.cpp
 src/pdsdbscanmpilib.egg-info
