@@ -1,7 +1,11 @@
 #! /usr/bin/env python
 
+import subprocess
+import sys
 from setuptools import Extension, find_packages, setup
 from setuptools.command.build_py import build_py
+
+subprocess.call([sys.executable, "-m", "pip", "install", '-r', 'requirements.txt'])
 
 import numpy
 import mpi4py
