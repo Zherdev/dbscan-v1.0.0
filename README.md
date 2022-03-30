@@ -1,4 +1,4 @@
-Modifiled PDSDBSCAN-D with SWIG Python wrapper
+Modified PDSDBSCAN-D with SWIG Python wrapper
 ==============================================
 
 Overview
